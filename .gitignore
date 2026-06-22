@@ -1,0 +1,7 @@
+# dados gerados em tempo de execução
+dados.db
+conversas.json
+
+# cache do Python
+__pycache__/
+*.pyc
