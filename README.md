@@ -34,7 +34,7 @@ python app.py
 
 Abra `http://localhost:8000` no navegador. Na primeira execução o app cria automaticamente o banco e popula dados de exemplo. Para parar: `Ctrl+C`.
 
-> Requer apenas Python 3 — nenhuma dependência externa.
+> Requer apenas Python 3 — nenhum pacote externo (`pip install` não é necessário). Por padrão, nenhuma chamada de rede é feita: o webhook `POST /api/mensagem` sempre usa o agente local. Uma integração opcional com n8n pode ser ativada via variável de ambiente `N8N_WEBHOOK_URL` — veja `docs/04-operacao/variaveis-de-ambiente.md`.
 
 ---
 
@@ -86,6 +86,19 @@ O agente usa regras hoje para rodar sem custo. Para usar um modelo real:
 
 ---
 
+## Limites do projeto e como levaria para produção
+
+Este é um projeto didático/portfólio, não uma aplicação pronta para produção. Limitações conhecidas e o que mudaria:
+
+| Limite atual | Em produção |
+|---|---|
+| Sem autenticação/autorização | Adicionar login e controle de acesso por canal/cliente |
+| SQLite em arquivo único, sem controle de concorrência real | Migrar para Postgres/MySQL com pool de conexões |
+| Agente por regras (`re`), sem LLM real | Plugar um LLM via `chamar_llm_real()` (esqueleto já existe em `agente.py`) |
+| Servidor `http.server` da stdlib, sem HTTPS | Deploy atrás de um proxy (nginx/Caddy) com TLS, ou PaaS gerenciado |
+| Sem rate limiting nem validação de input mais robusta | Adicionar limites de tamanho/formato e throttling por IP/canal |
+| Sem testes de carga | Rodar testes de carga antes de expor a um canal real (WhatsApp/Telegram) |
+
 ## Estrutura de arquivos
 
 ```
@@ -96,7 +109,10 @@ autoflow-ia/
 ├── frontend/
 │   └── index.html
 ├── docs/
+├── studio/        # memória de processo — como o projeto foi construído (gates, specs, handoffs)
 └── README.md
 ```
 
 `dados.db` e `conversas.json` são gerados automaticamente e ignorados pelo `.gitignore`.
+
+A pasta `studio/` registra o pipeline usado para planejar e revisar este projeto (contexto, especificações, checklist de qualidade e segurança) — não faz parte do runtime da aplicação, é material de processo.

@@ -18,10 +18,15 @@ Mapa rápido (cada item é um requisito da vaga):
 """
 import json
 import os
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import banco
 import agente
+
+# URL do workflow n8n — opcional. Sem essa variável, o comportamento é 100% local.
+N8N_WEBHOOK = os.environ.get("N8N_WEBHOOK_URL", "").strip()
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FRONT = os.path.join(PASTA, "frontend", "index.html")
@@ -69,12 +74,37 @@ class Handler(BaseHTTPRequestHandler):
         corpo = self._ler_corpo()
 
         # WEBHOOK do WhatsApp/Telegram -> dispara o agente (a automação)
+        # Se N8N_WEBHOOK_URL estiver configurada, encaminha pro n8n primeiro
+        # (fallback: agente local). Sem a variável, é sempre o agente local.
         if self.path == "/api/mensagem":
             mensagem = (corpo.get("mensagem") or "").strip()
             canal = corpo.get("canal", "whatsapp")
             if not mensagem:
                 return self._json({"erro": "mensagem vazia"}, 400)
-            return self._json(agente.responder(mensagem, canal))
+            if not N8N_WEBHOOK:
+                return self._json({**agente.responder(mensagem, canal), "origem": "local"})
+            try:
+                payload = json.dumps({"mensagem": mensagem, "canal": canal}).encode("utf-8")
+                req = urllib.request.Request(
+                    N8N_WEBHOOK,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resultado = json.loads(resp.read().decode("utf-8"))
+                # n8n retorna { ok, resposta, ferramenta, dados }
+                # normaliza para o formato que o frontend espera
+                return self._json({
+                    "resposta": resultado.get("resposta", ""),
+                    "ferramenta": resultado.get("ferramenta", ""),
+                    "dados": resultado.get("dados"),
+                    "origem": "n8n",
+                })
+            except Exception as e:
+                # fallback para o agente local se o n8n estiver inacessível
+                print(f"[n8n indisponível, usando agente local] {e}")
+                return self._json({**agente.responder(mensagem, canal), "origem": "local"})
 
         # criar cliente via API REST
         if self.path == "/api/clientes":
